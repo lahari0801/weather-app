@@ -1,0 +1,356 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Weather Forecast App</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <style>
+    :root {
+      --bg-light: linear-gradient(to right, #74ebd5, #acb6e5);
+      --bg-dark: linear-gradient(to right, #232526, #414345);
+      --text-color: #333;
+      --box-bg: #fff;
+    }
+
+    body {
+      margin: 0;
+      padding: 0;
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      background: var(--bg-light);
+      color: var(--text-color);
+      transition: all 0.4s ease;
+      min-height: 100vh;
+      display: flex;
+      justify-content: center;
+      padding-top: 40px;
+    }
+
+    .dark-mode {
+      --bg-light: linear-gradient(to right, #1e1e1e, #3a3a3a);
+      --text-color: #f0f0f0;
+      --box-bg: #2e2e2e;
+    }
+
+    .weather-container {
+      background-color: var(--box-bg);
+      padding: 40px;
+      border-radius: 20px;
+      box-shadow: 0 15px 35px rgba(0, 0, 0, 0.15);
+      width: 95%;
+      max-width: 1200px;
+      transition: background 0.4s;
+      position: relative;
+    }
+
+    h1 {
+      text-align: center;
+      margin-bottom: 10px;
+      font-size: 32px;
+    }
+
+    .clock {
+      text-align: center;
+      font-size: 18px;
+      margin-bottom: 30px;
+    }
+
+    .search-bar {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: center;
+      gap: 10px;
+      margin-bottom: 30px;
+    }
+
+    input, button {
+      padding: 14px;
+      border-radius: 10px;
+      font-size: 16px;
+      border: none;
+      outline: none;
+    }
+
+    input {
+      width: 280px;
+      border: 1px solid #ccc;
+    }
+
+    button {
+      background-color: #4e9af1;
+      color: white;
+      cursor: pointer;
+    }
+
+    button:hover {
+      background-color: #357ae8;
+    }
+
+    .dark-mode button {
+      background-color: #666;
+    }
+
+    .result {
+      font-size: 16px;
+      margin-bottom: 20px;
+    }
+
+    .weather-output {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 30px;
+    }
+
+    .overview, .forecast-box {
+      flex: 1 1 300px;
+      padding: 20px;
+      background-color: var(--box-bg);
+      border-radius: 15px;
+      text-align: center;
+    }
+
+    .details {
+      flex: 2 1 600px;
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap: 20px;
+    }
+
+    .info-box {
+      background: #e9f3fd;
+      padding: 20px;
+      border-radius: 12px;
+    }
+
+    .dark-mode .info-box {
+      background: #444;
+    }
+
+    .forecast-container {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: space-around;
+      gap: 15px;
+      margin-top: 30px;
+    }
+
+    .forecast-box img {
+      width: 60px;
+    }
+
+    canvas {
+      margin-top: 40px;
+      background-color: rgba(255, 255, 255, 0.05);
+      border-radius: 12px;
+      padding: 20px;
+    }
+
+    #toggleMode {
+      position: absolute;
+      top: 20px;
+      right: 20px;
+      background: #ccc;
+      color: #000;
+      padding: 10px 20px;
+      border-radius: 8px;
+    }
+
+    .dark-mode #toggleMode {
+      background: #222;
+      color: #fff;
+    }
+  </style>
+</head>
+<body>
+  <div class="weather-container">
+    <button id="toggleMode" onclick="toggleDarkMode()">🌗 Toggle Dark Mode</button>
+    <h1>🌤️ Weather Forecast</h1>
+    <div class="clock" id="clock"></div>
+    <div class="search-bar">
+      <input type="text" id="cityInput" placeholder="Enter city name">
+      <button onclick="startVoiceSearch()">🎤</button>
+      <button onclick="getWeather()">Get Weather</button>
+      <button onclick="getLocationWeather()">📍 Use My Location</button>
+    </div>
+    <div id="weatherResult" class="result"></div>
+    <canvas id="tempChart"></canvas>
+  </div>
+
+  <script>
+    const apiKey = '853947b9d7ede67e953b2f275315ddd6';
+    let tempChart;
+
+    const bgImages = {
+      Clear: 'url(https://i.imgur.com/U7gAbDk.jpg)',
+      Clouds: 'url(https://i.imgur.com/Jj9Zs2S.jpg)',
+      Rain: 'url(https://i.imgur.com/qNzHgJL.jpg)',
+      Thunderstorm: 'url(https://i.imgur.com/7j3C7lT.jpg)',
+      Snow: 'url(https://i.imgur.com/sYlV5Ol.jpg)',
+      Mist: 'url(https://i.imgur.com/nJ1GQ9W.jpg)',
+      Default: 'url(https://i.imgur.com/XvR6p9z.jpg)'
+    };
+
+    function updateClock() {
+      const clock = document.getElementById('clock');
+      setInterval(() => {
+        clock.innerHTML = new Date().toLocaleString();
+      }, 1000);
+    }
+
+    updateClock();
+
+    function formatTime(timestamp) {
+      return new Date(timestamp * 1000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    }
+
+    function toggleDarkMode() {
+      document.body.classList.toggle("dark-mode");
+    }
+
+    async function getWeather(city = null) {
+      const cityInput = document.getElementById('cityInput');
+      const resultDiv = document.getElementById('weatherResult');
+      const chartCanvas = document.getElementById('tempChart');
+
+      city = city || cityInput.value.trim();
+      if (!city) return resultDiv.innerHTML = '❗ Please enter a city name.';
+
+      resultDiv.innerHTML = '🔍 Fetching weather...';
+      chartCanvas.style.display = 'none';
+
+      try {
+        const weatherRes = await fetch(`https://api.openweathermap.org/data/2.5/weather?q=${city}&appid=${apiKey}&units=metric`);
+        const weatherData = await weatherRes.json();
+
+        if (!weatherRes.ok) throw new Error(weatherData.message);
+
+        const forecastRes = await fetch(`https://api.openweathermap.org/data/2.5/forecast?q=${city}&appid=${apiKey}&units=metric`);
+        const forecastData = await forecastRes.json();
+
+        updateBackground(weatherData.weather[0].main);
+        displayWeather(weatherData, forecastData);
+        renderChart(forecastData);
+      } catch (err) {
+        resultDiv.innerHTML = `❌ ${err.message}`;
+      }
+    }
+
+    function updateBackground(condition) {
+      const imageUrl = bgImages[condition] || bgImages.Default;
+      document.body.style.backgroundImage = imageUrl;
+      document.body.style.backgroundSize = "cover";
+      document.body.style.backgroundRepeat = "no-repeat";
+      document.body.style.backgroundAttachment = "fixed";
+    }
+
+    function displayWeather(data, forecastData) {
+      const { name, main, weather, wind, sys, visibility } = data;
+      const icon = `https://openweathermap.org/img/wn/${weather[0].icon}@2x.png`;
+
+      const forecastItems = forecastData.list.filter((_, i) => i % 8 === 0).map(item => {
+        return `
+          <div class="forecast-box">
+            <h4>${new Date(item.dt_txt).toLocaleDateString()}</h4>
+            <img src="https://openweathermap.org/img/wn/${item.weather[0].icon}@2x.png">
+            <p><strong>${item.main.temp}°C</strong></p>
+            <p>${item.weather[0].main}</p>
+          </div>
+        `;
+      }).join('');
+
+      document.getElementById('weatherResult').innerHTML = `
+        <div class="weather-output">
+          <div class="overview">
+            <h2>${name}, ${sys.country}</h2>
+            <img src="${icon}" alt="${weather[0].description}">
+            <p><strong>${weather[0].main}</strong> - ${weather[0].description}</p>
+            <p>🌡️ ${main.temp}°C</p>
+          </div>
+          <div class="details">
+            <div class="info-box">🌡️ <strong>Feels like:</strong> ${main.feels_like}°C</div>
+            <div class="info-box">💧 <strong>Humidity:</strong> ${main.humidity}%</div>
+            <div class="info-box">📈 <strong>Pressure:</strong> ${main.pressure} hPa</div>
+            <div class="info-box">🌅 <strong>Sunrise:</strong> ${formatTime(sys.sunrise)}</div>
+            <div class="info-box">🌇 <strong>Sunset:</strong> ${formatTime(sys.sunset)}</div>
+            <div class="info-box">🌫️ <strong>Visibility:</strong> ${visibility / 1000} km</div>
+            <div class="info-box">💨 <strong>Wind:</strong> ${wind.speed} m/s</div>
+          </div>
+        </div>
+        <div class="forecast-container">${forecastItems}</div>
+      `;
+    }
+
+    function renderChart(forecastData) {
+      const chartCanvas = document.getElementById('tempChart');
+      chartCanvas.style.display = 'block';
+
+      const nextHours = forecastData.list.slice(0, 8);
+      const labels = nextHours.map(item =>
+        new Date(item.dt_txt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+      );
+      const temps = nextHours.map(item => item.main.temp);
+
+      if (tempChart) tempChart.destroy();
+
+      tempChart = new Chart(chartCanvas, {
+        type: 'line',
+        data: {
+          labels: labels,
+          datasets: [{
+            label: 'Temperature (°C)',
+            data: temps,
+            fill: true,
+            borderColor: '#4e9af1',
+            backgroundColor: 'rgba(78, 154, 241, 0.1)',
+            tension: 0.4
+          }]
+        },
+        options: {
+          responsive: true,
+          plugins: {
+            legend: { display: true },
+            tooltip: { mode: 'index', intersect: false }
+          },
+          scales: {
+            y: {
+              beginAtZero: false,
+              title: { display: true, text: 'Temperature (°C)' }
+            }
+          }
+        }
+      });
+    }
+
+    function getLocationWeather() {
+      if (!navigator.geolocation) return alert("Geolocation is not supported by your browser.");
+      navigator.geolocation.getCurrentPosition(async pos => {
+        const { latitude, longitude } = pos.coords;
+        const res = await fetch(`https://api.openweathermap.org/data/2.5/weather?lat=${latitude}&lon=${longitude}&appid=${apiKey}&units=metric`);
+        const data = await res.json();
+        getWeather(data.name);
+      }, err => {
+        alert("Failed to get your location. Please enable GPS.");
+      });
+    }
+
+    function startVoiceSearch() {
+      if (!('webkitSpeechRecognition' in window)) {
+        alert("Sorry, your browser doesn't support voice recognition.");
+        return;
+      }
+
+      const recognition = new webkitSpeechRecognition();
+      recognition.lang = 'en-US';
+      recognition.interimResults = false;
+      recognition.maxAlternatives = 1;
+      recognition.start();
+
+      recognition.onresult = function (event) {
+        let cityName = event.results[0][0].transcript;
+        cityName = cityName.replace(/[.,!?]+$/, '').trim();
+        document.getElementById('cityInput').value = cityName;
+        getWeather();
+      };
+    }
+  </script>
+</body>
+</html>
